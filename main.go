@@ -33,6 +33,7 @@ func main() {
 	tools := []ToolDefinition{
 		ReadFileDefinition,
 		ListDirectoryDefinition,
+		SearchIMDbDefinition,
 	}
 	agent := NewAgent(&client, getUserMessage, tools)
 

@@ -30,6 +30,13 @@ var ListDirectoryDefinition = ToolDefinition{
 	Function:    ListDirectory,
 }
 
+var SearchIMDbDefinition = ToolDefinition{
+	Name:        "search_imdb",
+	Description: "Search for a title on IMDb. Returns a JSON string with title, id, and description.",
+	InputSchema: SearchIMDbInputSchema,
+	Function:    SearchIMDb,
+}
+
 type ReadFileInput struct {
 	Path string `json:"path" jsonschema_description:"The relative path of a file in the working directory."`
 }
@@ -38,8 +45,13 @@ type ListDirectoryInput struct {
 	Path string `json:"path" jsonschema_description:"The relative path of a directory in the working directory. Leave empty for current directory."`
 }
 
+type SearchIMDbInput struct {
+	SearchTerm string `json:"search_term" jsonschema_description:"The search term to look for on IMDb."`
+}
+
 var ReadFileInputSchema = GenerateSchema[ReadFileInput]()
 var ListDirectoryInputSchema = GenerateSchema[ListDirectoryInput]()
+var SearchIMDbInputSchema = GenerateSchema[SearchIMDbInput]()
 
 func ReadFile(input json.RawMessage) (string, error) {
 	readFileInput := ReadFileInput{}
@@ -88,6 +100,18 @@ func ListDirectory(input json.RawMessage) (string, error) {
 	}
 
 	return result, nil
+}
+
+func SearchIMDb(input json.RawMessage) (string, error) {
+	searchInput := SearchIMDbInput{}
+	err := json.Unmarshal(input, &searchInput)
+	if err != nil {
+		return "", err
+	}
+
+	// TODO: Implement IMDb search
+	// For now, return empty JSON structure
+	return `{"title":"","id":"","description":""}`, nil
 }
 
 func GenerateSchema[T any]() anthropic.ToolInputSchemaParam {
