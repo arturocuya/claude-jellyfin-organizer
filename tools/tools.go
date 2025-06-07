@@ -5,4 +5,5 @@ var AllTools = []ToolDefinition{
 	ListDirectoryDefinition,
 	SearchIMDbDefinition,
 	CopyFileDefinition,
+	RenameJellyfinMediaDefinition,
 }

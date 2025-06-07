@@ -2,11 +2,16 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/joho/godotenv"
@@ -21,24 +26,118 @@ func main() {
 
 	client := anthropic.NewClient()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	// Collect user inputs
+	inputFolder := getInput("Enter the input folder: ")
+	mediaType := getInput("Enter the media type (movie/show): ")
+	mediaTitle := getInput("Enter the media title: ")
 
+	// Get env vars
+	moviesFolder := os.Getenv("JELLYFIN_MOVIES_FOLDER")
+	showsFolder := os.Getenv("JELLYFIN_SHOWS_FOLDER")
+
+	if moviesFolder == "" || showsFolder == "" {
+		log.Fatal("JELLYFIN_MOVIES_FOLDER and JELLYFIN_SHOWS_FOLDER environment variables must be set")
+	}
+
+	// Read Jellyfin docs
+	jellyfinDocs, err := readJellyfinDocs()
+	if err != nil {
+		log.Fatalf("Error reading Jellyfin docs: %v", err)
+	}
+
+	// Process prompt template
+	prompt, err := processPromptTemplate(inputFolder, mediaType, mediaTitle, moviesFolder, showsFolder, jellyfinDocs)
+	if err != nil {
+		log.Fatalf("Error processing prompt template: %v", err)
+	}
+
+	scanner := bufio.NewScanner(os.Stdin)
 	getUserMessage := func() (string, bool) {
 		if !scanner.Scan() {
 			return "", false
 		}
-
 		return scanner.Text(), true
 	}
 
 	toolDefinitions := tools.AllTools
 	agent := NewAgent(&client, getUserMessage, toolDefinitions)
 
-	err = agent.Run(context.TODO())
-
+	err = agent.RunWithInitialPrompt(context.TODO(), prompt)
 	if err != nil {
 		fmt.Printf("Error: %+v\n", err)
 	}
+}
+
+func getInput(prompt string) string {
+	fmt.Print(prompt)
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	return strings.TrimSpace(scanner.Text())
+}
+
+func readJellyfinDocs() (string, error) {
+	var docs strings.Builder
+
+	err := filepath.WalkDir("prompt/jellyfin-docs", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if strings.HasSuffix(path, ".md") {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			docs.Write(content)
+			docs.WriteString("\n")
+		}
+
+		return nil
+	})
+
+	return docs.String(), err
+}
+
+type PromptData struct {
+	InputFolder    string
+	MediaType      string
+	MediaTitle     string
+	MoviesFolder   string
+	ShowsFolder    string
+	JellyfinDocs   string
+}
+
+func processPromptTemplate(inputFolder, mediaType, mediaTitle, moviesFolder, showsFolder, jellyfinDocs string) (string, error) {
+	templateContent, err := os.ReadFile("prompt/main.md")
+	if err != nil {
+		return "", err
+	}
+
+	tmpl, err := template.New("prompt").Parse(string(templateContent))
+	if err != nil {
+		return "", err
+	}
+
+	data := PromptData{
+		InputFolder:  inputFolder,
+		MediaType:    mediaType,
+		MediaTitle:   mediaTitle,
+		MoviesFolder: moviesFolder,
+		ShowsFolder:  showsFolder,
+		JellyfinDocs: jellyfinDocs,
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
 
 type Agent struct {
@@ -55,18 +154,46 @@ func NewAgent(client *anthropic.Client, getUserMesage func() (string, bool), too
 	}
 }
 
-func (a *Agent) Run(ctx context.Context) error {
+func (a *Agent) RunWithInitialPrompt(ctx context.Context, initialPrompt string) error {
 	convo := []anthropic.MessageParam{}
 
-	fmt.Println("Chat with Claude (use 'ctrl-c' to quit)")
+	// Add initial prompt as first message
+	userMsg := anthropic.NewUserMessage(anthropic.NewTextBlock(initialPrompt))
+	convo = append(convo, userMsg)
 
-	readUserInput := true
+	fmt.Println("Chat with Claude (use 'ctrl-c' to quit)")
+	fmt.Println("Sending initial prompt...")
+
+	// Process initial prompt
+	message, err := a.runInference(ctx, convo)
+	if err != nil {
+		return err
+	}
+
+	convo = append(convo, message.ToParam())
+
+	toolResults := []anthropic.ContentBlockParamUnion{}
+	for _, content := range message.Content {
+		switch content.Type {
+		case "text":
+			fmt.Printf("\u001b[93mClaude\u001b[0m: %s\n", content.Text)
+		case "tool_use":
+			result := a.executeTool(content.ID, content.Name, content.Input)
+			toolResults = append(toolResults, result)
+		}
+	}
+
+	if len(toolResults) > 0 {
+		convo = append(convo, anthropic.NewUserMessage(toolResults...))
+	}
+
+	// Continue with regular conversation loop
+	readUserInput := len(toolResults) == 0
 	for {
 		if readUserInput {
 			fmt.Print("\u001b[94mYou\u001b[0m: ")
 
 			userInput, ok := a.getUserMesage()
-
 			if !ok {
 				break
 			}
@@ -76,7 +203,6 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 
 		message, err := a.runInference(ctx, convo)
-
 		if err != nil {
 			return err
 		}

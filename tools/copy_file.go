@@ -9,15 +9,15 @@ import (
 )
 
 type CopyFileInput struct {
-	InitialPath string `json:"initial_path" jsonschema_description:"The source file path to copy from. Must be within Jellyfin media directories."`
-	EndingPath  string `json:"ending_path" jsonschema_description:"The destination file path to copy to. Must be within Jellyfin media directories."`
+	InitialPath string `json:"initial_path" jsonschema_description:"The source file path to copy from. Can be any file path."`
+	EndingPath  string `json:"ending_path" jsonschema_description:"The destination file path to copy to. Must be within Jellyfin media directories (relative path)."`
 }
 
 var CopyFileInputSchema = GenerateSchema[CopyFileInput]()
 
 var CopyFileDefinition = ToolDefinition{
 	Name:        "copy_file",
-	Description: "Copy a file from one path to another within Jellyfin media directories. Both source and destination paths must be within JELLYFIN_SHOWS_FOLDER or JELLYFIN_MOVIES_FOLDER.",
+	Description: "Copy a file from any source path to a destination within Jellyfin media directories. Source can be any file, destination must be within JELLYFIN_SHOWS_FOLDER or JELLYFIN_MOVIES_FOLDER.",
 	InputSchema: CopyFileInputSchema,
 	Function:    CopyFile,
 }
@@ -29,14 +29,10 @@ func CopyFile(input json.RawMessage) (string, error) {
 		return "", fmt.Errorf("failed to unmarshal input: %v", err)
 	}
 
-	// Validate and resolve source path
-	srcPath, err := validateAndResolvePath(copyFileInput.InitialPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid source path: %v", err)
-	}
+	srcPath := copyFileInput.InitialPath
 
-	// Validate and resolve destination path
-	dstPath, err := validateAndResolvePath(copyFileInput.EndingPath)
+	// Validate and resolve destination path within Jellyfin directories
+	dstPath, err := validateAndResolveDestinationPath(copyFileInput.EndingPath)
 	if err != nil {
 		return "", fmt.Errorf("invalid destination path: %v", err)
 	}
@@ -75,7 +71,7 @@ func CopyFile(input json.RawMessage) (string, error) {
 	return fmt.Sprintf("Successfully copied file from %s to %s", srcPath, dstPath), nil
 }
 
-func validateAndResolvePath(inputPath string) (string, error) {
+func validateAndResolveDestinationPath(inputPath string) (string, error) {
 	showsFolder := os.Getenv("JELLYFIN_SHOWS_FOLDER")
 	moviesFolder := os.Getenv("JELLYFIN_MOVIES_FOLDER")
 
@@ -103,5 +99,7 @@ func validateAndResolvePath(inputPath string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("path must be within Jellyfin media directories")
+	return "", fmt.Errorf("destination path must be within Jellyfin media directories")
 }
+
+

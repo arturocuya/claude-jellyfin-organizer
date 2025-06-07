@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type ReadFileInput struct {
 	Type  string `json:"type" jsonschema_description:"The type of media directory to read from. Must be 'shows' or 'movies'."`
-	Path  string `json:"path" jsonschema_description:"The relative path of a file within the media directory."`
+	Path  string `json:"path" jsonschema_description:"The relative path of a file within the media directory. File should not be an image or video."`
 	Bytes int    `json:"bytes" jsonschema_description:"Number of bytes to read from the start of the file. If 0, reads the entire file."`
 }
 
@@ -47,17 +48,26 @@ func ReadFile(input json.RawMessage) (string, error) {
 
 	filePath := filepath.Join(basePath, readFileInput.Path)
 
+	// Check if the file is an image or video
+	ext := strings.ToLower(filepath.Ext(filePath))
+	imageVideoExts := []string{".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff", ".tif", ".ico", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".ogv", ".vob", ".ts", ".mts", ".m2ts"}
+	for _, blockedExt := range imageVideoExts {
+		if ext == blockedExt {
+			return "", fmt.Errorf("cannot read image or video files: %s", filePath)
+		}
+	}
+
 	// Ensure the resolved path is still within the base directory
 	absBasePath, err := filepath.Abs(basePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve base path: %v", err)
 	}
-	
+
 	absFilePath, err := filepath.Abs(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve file path: %v", err)
 	}
-	
+
 	relPath, err := filepath.Rel(absBasePath, absFilePath)
 	if err != nil || relPath == ".." || len(relPath) > 2 && relPath[:3] == "../" {
 		return "", fmt.Errorf("access denied: path outside of allowed directory")
