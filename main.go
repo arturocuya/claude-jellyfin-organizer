@@ -10,6 +10,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/joho/godotenv"
+	"ojm/tools"
 )
 
 func main() {
@@ -30,12 +31,8 @@ func main() {
 		return scanner.Text(), true
 	}
 
-	tools := []ToolDefinition{
-		ReadFileDefinition,
-		ListDirectoryDefinition,
-		SearchIMDbDefinition,
-	}
-	agent := NewAgent(&client, getUserMessage, tools)
+	toolDefinitions := tools.AllTools
+	agent := NewAgent(&client, getUserMessage, toolDefinitions)
 
 	err = agent.Run(context.TODO())
 
@@ -47,14 +44,14 @@ func main() {
 type Agent struct {
 	client        *anthropic.Client
 	getUserMesage func() (string, bool)
-	tools         []ToolDefinition
+	tools         []tools.ToolDefinition
 }
 
-func NewAgent(client *anthropic.Client, getUserMesage func() (string, bool), tools []ToolDefinition) *Agent {
+func NewAgent(client *anthropic.Client, getUserMesage func() (string, bool), toolDefs []tools.ToolDefinition) *Agent {
 	return &Agent{
 		client:        client,
 		getUserMesage: getUserMesage,
-		tools:         tools,
+		tools:         toolDefs,
 	}
 }
 
@@ -132,7 +129,7 @@ func (a *Agent) runInference(ctx context.Context, conversation []anthropic.Messa
 }
 
 func (a *Agent) executeTool(id, name string, input json.RawMessage) anthropic.ContentBlockParamUnion {
-	var toolDef ToolDefinition
+	var toolDef tools.ToolDefinition
 	var found bool
 
 	for _, tool := range a.tools {
