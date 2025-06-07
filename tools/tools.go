@@ -4,4 +4,5 @@ var AllTools = []ToolDefinition{
 	ReadFileDefinition,
 	ListDirectoryDefinition,
 	SearchIMDbDefinition,
+	CopyFileDefinition,
 }
