@@ -2,18 +2,21 @@ package tools
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 )
 
 type ReadFileInput struct {
-	Path string `json:"path" jsonschema_description:"The relative path of a file in the working directory."`
+	Type string `json:"type" jsonschema_description:"The type of media directory to read from. Must be 'shows' or 'movies'."`
+	Path string `json:"path" jsonschema_description:"The relative path of a file within the media directory."`
 }
 
 var ReadFileInputSchema = GenerateSchema[ReadFileInput]()
 
 var ReadFileDefinition = ToolDefinition{
 	Name:        "read_file",
-	Description: "Read the contents of a given relative file path. Use this when you want to see what's inside a file. Do not use this with directory names.",
+	Description: "Read the contents of a file within Jellyfin media directories. Access is restricted to files within JELLYFIN_SHOWS_FOLDER and JELLYFIN_MOVIES_FOLDER.",
 	InputSchema: ReadFileInputSchema,
 	Function:    ReadFile,
 }
@@ -22,10 +25,44 @@ func ReadFile(input json.RawMessage) (string, error) {
 	readFileInput := ReadFileInput{}
 	err := json.Unmarshal(input, &readFileInput)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("failed to unmarshal input: %v", err)
 	}
 
-	content, err := os.ReadFile(readFileInput.Path)
+	var basePath string
+	switch readFileInput.Type {
+	case "shows":
+		basePath = os.Getenv("JELLYFIN_SHOWS_FOLDER")
+		if basePath == "" {
+			return "", fmt.Errorf("JELLYFIN_SHOWS_FOLDER environment variable not set")
+		}
+	case "movies":
+		basePath = os.Getenv("JELLYFIN_MOVIES_FOLDER")
+		if basePath == "" {
+			return "", fmt.Errorf("JELLYFIN_MOVIES_FOLDER environment variable not set")
+		}
+	default:
+		return "", fmt.Errorf("invalid type '%s': must be 'shows' or 'movies'", readFileInput.Type)
+	}
+
+	filePath := filepath.Join(basePath, readFileInput.Path)
+
+	// Ensure the resolved path is still within the base directory
+	absBasePath, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base path: %v", err)
+	}
+	
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve file path: %v", err)
+	}
+	
+	relPath, err := filepath.Rel(absBasePath, absFilePath)
+	if err != nil || relPath == ".." || len(relPath) > 2 && relPath[:3] == "../" {
+		return "", fmt.Errorf("access denied: path outside of allowed directory")
+	}
+
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err
 	}
