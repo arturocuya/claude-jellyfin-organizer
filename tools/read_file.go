@@ -8,15 +8,16 @@ import (
 )
 
 type ReadFileInput struct {
-	Type string `json:"type" jsonschema_description:"The type of media directory to read from. Must be 'shows' or 'movies'."`
-	Path string `json:"path" jsonschema_description:"The relative path of a file within the media directory."`
+	Type  string `json:"type" jsonschema_description:"The type of media directory to read from. Must be 'shows' or 'movies'."`
+	Path  string `json:"path" jsonschema_description:"The relative path of a file within the media directory."`
+	Bytes int    `json:"bytes" jsonschema_description:"Number of bytes to read from the start of the file. If 0, reads the entire file."`
 }
 
 var ReadFileInputSchema = GenerateSchema[ReadFileInput]()
 
 var ReadFileDefinition = ToolDefinition{
 	Name:        "read_file",
-	Description: "Read the contents of a file within Jellyfin media directories. Access is restricted to files within JELLYFIN_SHOWS_FOLDER and JELLYFIN_MOVIES_FOLDER.",
+	Description: "Read the contents of a file within Jellyfin media directories. Can read entire file or a specified number of bytes from the start. Access is restricted to files within JELLYFIN_SHOWS_FOLDER and JELLYFIN_MOVIES_FOLDER.",
 	InputSchema: ReadFileInputSchema,
 	Function:    ReadFile,
 }
@@ -62,9 +63,26 @@ func ReadFile(input json.RawMessage) (string, error) {
 		return "", fmt.Errorf("access denied: path outside of allowed directory")
 	}
 
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
+	if readFileInput.Bytes == 0 {
+		// Read entire file
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", err
+		}
+		return string(content), nil
+	} else {
+		// Read specified number of bytes
+		file, err := os.Open(filePath)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+
+		buffer := make([]byte, readFileInput.Bytes)
+		n, err := file.Read(buffer)
+		if err != nil && err.Error() != "EOF" {
+			return "", err
+		}
+		return string(buffer[:n]), nil
 	}
-	return string(content), nil
 }
