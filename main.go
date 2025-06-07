@@ -26,10 +26,8 @@ func main() {
 
 	client := anthropic.NewClient()
 
-	// Collect user inputs
-	inputFolder := getInput("Enter the input folder: ")
-	mediaType := getInput("Enter the media type (movie/show): ")
-	mediaTitle := getInput("Enter the media title: ")
+	// Collect user input
+	inputPath := getInput("Enter the path of the file or folder to organize: ")
 
 	// Get env vars
 	moviesFolder := os.Getenv("JELLYFIN_MOVIES_FOLDER")
@@ -46,7 +44,7 @@ func main() {
 	}
 
 	// Process prompt template
-	prompt, err := processPromptTemplate(inputFolder, mediaType, mediaTitle, moviesFolder, showsFolder, jellyfinDocs)
+	prompt, err := processPromptTemplate(inputPath, moviesFolder, showsFolder, jellyfinDocs)
 	if err != nil {
 		log.Fatalf("Error processing prompt template: %v", err)
 	}
@@ -103,15 +101,13 @@ func readJellyfinDocs() (string, error) {
 }
 
 type PromptData struct {
-	InputFolder    string
-	MediaType      string
-	MediaTitle     string
+	InputPath      string
 	MoviesFolder   string
 	ShowsFolder    string
 	JellyfinDocs   string
 }
 
-func processPromptTemplate(inputFolder, mediaType, mediaTitle, moviesFolder, showsFolder, jellyfinDocs string) (string, error) {
+func processPromptTemplate(inputPath, moviesFolder, showsFolder, jellyfinDocs string) (string, error) {
 	templateContent, err := os.ReadFile("prompt/main.md")
 	if err != nil {
 		return "", err
@@ -123,9 +119,7 @@ func processPromptTemplate(inputFolder, mediaType, mediaTitle, moviesFolder, sho
 	}
 
 	data := PromptData{
-		InputFolder:  inputFolder,
-		MediaType:    mediaType,
-		MediaTitle:   mediaTitle,
+		InputPath:    inputPath,
 		MoviesFolder: moviesFolder,
 		ShowsFolder:  showsFolder,
 		JellyfinDocs: jellyfinDocs,
