@@ -17,7 +17,7 @@ var SearchIMDbInputSchema = GenerateSchema[SearchIMDbInput]()
 
 var SearchIMDbDefinition = ToolDefinition{
 	Name:        "search_imdb",
-	Description: "Search for a title on IMDb. Returns a JSON string with title, id, and description.",
+	Description: "Search for a term on IMDB. You should only use this tool ONCE. Results will have the movie/show name, the year and the director or cast. Text might be glued together. Take ONE guess to figure out which show you're looking for and get the id in ONE shot. The important thing is to get the id",
 	InputSchema: SearchIMDbInputSchema,
 	Function:    SearchIMDb,
 }
@@ -42,11 +42,11 @@ func SearchIMDb(input json.RawMessage) (string, error) {
 
 	// Scrape each search result
 	c.OnHTML(".ipc-metadata-list-summary-item__tc", func(e *colly.HTMLElement) {
-		textContent := e.Text
-		
+		textContent := e.DOM.Text()
+
 		// Get the ID from the first child anchor tag
 		href := e.ChildAttr("a", "href")
-		
+
 		// Extract ID from href like "/title/tt4955642/?ref_=fn_all_ttl_1"
 		var id string
 		if href != "" {
@@ -66,7 +66,7 @@ func SearchIMDb(input json.RawMessage) (string, error) {
 
 	// Construct IMDB search URL
 	searchURL := fmt.Sprintf("https://www.imdb.com/find/?q=%s&ref_=nv_sr_sm", url.QueryEscape(searchInput.SearchTerm))
-	
+
 	err = c.Visit(searchURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to scrape IMDB: %w", err)
@@ -77,6 +77,8 @@ func SearchIMDb(input json.RawMessage) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal results: %w", err)
 	}
+
+	fmt.Printf("found :%+v\n", string(jsonData))
 
 	return string(jsonData), nil
 }

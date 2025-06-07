@@ -9,15 +9,15 @@ import (
 )
 
 type CopyFileInput struct {
-	InitialPath string `json:"initial_path" jsonschema_description:"The source file path to copy from. Can be any file path."`
-	EndingPath  string `json:"ending_path" jsonschema_description:"The destination file path to copy to. Must be within Jellyfin media directories (relative path)."`
+	InitialPath string `json:"initial_path" jsonschema_description:"The source file path to copy from. Use an absolute path"`
+	EndingPath  string `json:"ending_path" jsonschema_description:"The destination file path to copy to. Use an absolute path"`
 }
 
 var CopyFileInputSchema = GenerateSchema[CopyFileInput]()
 
 var CopyFileDefinition = ToolDefinition{
 	Name:        "copy_file",
-	Description: "Copy a file from any source path to a destination within Jellyfin media directories. Source can be any file, destination must be within JELLYFIN_SHOWS_FOLDER or JELLYFIN_MOVIES_FOLDER.",
+	Description: "Copy a file from any source path to a destination within Jellyfin media directories. Source and destination should be absolute paths",
 	InputSchema: CopyFileInputSchema,
 	Function:    CopyFile,
 }
@@ -31,11 +31,12 @@ func CopyFile(input json.RawMessage) (string, error) {
 
 	srcPath := copyFileInput.InitialPath
 
-	// Validate and resolve destination path within Jellyfin directories
-	dstPath, err := validateAndResolveDestinationPath(copyFileInput.EndingPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid destination path: %v", err)
+	// Validate destination path within Jellyfin directories
+	if err = ValidatePath(copyFileInput.EndingPath); err != nil {
+		return "", err
 	}
+
+	dstPath := copyFileInput.EndingPath
 
 	// Check if source file exists
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
@@ -70,36 +71,3 @@ func CopyFile(input json.RawMessage) (string, error) {
 
 	return fmt.Sprintf("Successfully copied file from %s to %s", srcPath, dstPath), nil
 }
-
-func validateAndResolveDestinationPath(inputPath string) (string, error) {
-	showsFolder := os.Getenv("JELLYFIN_SHOWS_FOLDER")
-	moviesFolder := os.Getenv("JELLYFIN_MOVIES_FOLDER")
-
-	if showsFolder == "" || moviesFolder == "" {
-		return "", fmt.Errorf("JELLYFIN_SHOWS_FOLDER or JELLYFIN_MOVIES_FOLDER environment variable not set")
-	}
-
-	// Try to resolve path within shows folder
-	showsPath := filepath.Join(showsFolder, inputPath)
-	if absShowsPath, err := filepath.Abs(showsPath); err == nil {
-		if absBasePath, err := filepath.Abs(showsFolder); err == nil {
-			if relPath, err := filepath.Rel(absBasePath, absShowsPath); err == nil && relPath != ".." && !(len(relPath) > 2 && relPath[:3] == "../") {
-				return showsPath, nil
-			}
-		}
-	}
-
-	// Try to resolve path within movies folder
-	moviesPath := filepath.Join(moviesFolder, inputPath)
-	if absMoviesPath, err := filepath.Abs(moviesPath); err == nil {
-		if absBasePath, err := filepath.Abs(moviesFolder); err == nil {
-			if relPath, err := filepath.Rel(absBasePath, absMoviesPath); err == nil && relPath != ".." && !(len(relPath) > 2 && relPath[:3] == "../") {
-				return moviesPath, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("destination path must be within Jellyfin media directories")
-}
-
-

@@ -13,9 +13,10 @@ import (
 	"strings"
 	"text/template"
 
+	"ojm/tools"
+
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/joho/godotenv"
-	"ojm/tools"
 )
 
 func main() {
@@ -101,10 +102,10 @@ func readJellyfinDocs() (string, error) {
 }
 
 type PromptData struct {
-	InputPath      string
-	MoviesFolder   string
-	ShowsFolder    string
-	JellyfinDocs   string
+	InputPath    string
+	MoviesFolder string
+	ShowsFolder  string
+	JellyfinDocs string
 }
 
 func processPromptTemplate(inputPath, moviesFolder, showsFolder, jellyfinDocs string) (string, error) {
@@ -268,6 +269,7 @@ func (a *Agent) executeTool(id, name string, input json.RawMessage) anthropic.Co
 	response, err := toolDef.Function(input)
 
 	if err != nil {
+		fmt.Printf("\u001b[92mtool\u001b[0m: error: %s\n", err.Error())
 		return anthropic.NewToolResultBlock(id, err.Error(), true)
 	}
 

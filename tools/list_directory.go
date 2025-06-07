@@ -4,19 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
 type ListDirectoryInput struct {
-	Type    string `json:"type" jsonschema_description:"The type of media directory to list. Must be 'shows' or 'movies'."`
-	Subpath string `json:"subpath" jsonschema_description:"The relative path within the media directory. Leave empty for the root of the media directory."`
+	Path string `json:"path" jsonschema_description:"The directory path to list. Can be absolute or relative path."`
 }
 
 var ListDirectoryInputSchema = GenerateSchema[ListDirectoryInput]()
 
 var ListDirectoryDefinition = ToolDefinition{
 	Name:        "list_directory",
-	Description: "List the contents of a Jellyfin media directory. Access is restricted to paths within JELLYFIN_SHOWS_FOLDER and JELLYFIN_MOVIES_FOLDER.",
+	Description: "List the contents of a directory.",
 	InputSchema: ListDirectoryInputSchema,
 	Function:    ListDirectory,
 }
@@ -28,41 +26,12 @@ func ListDirectory(input json.RawMessage) (string, error) {
 		return "", err
 	}
 
-	var basePath string
-	switch listDirInput.Type {
-	case "shows":
-		basePath = os.Getenv("JELLYFIN_SHOWS_FOLDER")
-		if basePath == "" {
-			return "", fmt.Errorf("JELLYFIN_SHOWS_FOLDER environment variable not set")
-		}
-	case "movies":
-		basePath = os.Getenv("JELLYFIN_MOVIES_FOLDER")
-		if basePath == "" {
-			return "", fmt.Errorf("JELLYFIN_MOVIES_FOLDER environment variable not set")
-		}
-	default:
-		return "", fmt.Errorf("invalid type '%s': must be 'shows' or 'movies'", listDirInput.Type)
-	}
+	dirPath := listDirInput.Path
 
-	dirPath := basePath
-	if listDirInput.Subpath != "" {
-		dirPath = filepath.Join(basePath, listDirInput.Subpath)
-	}
-
-	// Ensure the resolved path is still within the base directory
-	absBasePath, err := filepath.Abs(basePath)
+	// Validate that the path is within allowed directories
+	err = ValidatePath(dirPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve base path: %v", err)
-	}
-	
-	absDirPath, err := filepath.Abs(dirPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve directory path: %v", err)
-	}
-	
-	relPath, err := filepath.Rel(absBasePath, absDirPath)
-	if err != nil || relPath == ".." || len(relPath) > 2 && relPath[:3] == "../" {
-		return "", fmt.Errorf("access denied: path outside of allowed directory")
+		return "", fmt.Errorf("access denied: %v", err)
 	}
 
 	entries, err := os.ReadDir(dirPath)

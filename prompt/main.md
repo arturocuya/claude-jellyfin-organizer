@@ -6,12 +6,15 @@ i have media files at this path: "{{.InputPath}}"
 
 to organize my files, here's what you should do:
 
-1. examine the files to determine what media they contain (movie or tv show). you can determine the type also in the next step.
-2. find the exact name of the media on imdb, so that you can get the imdb id
-3. consider the documentation of how to organize jellyfin media. i'll attach it
-4. use the available tools to copy and rename my files and place them in the right folder
+1. find the exact name of the media on imdb, so that you can get the imdb id. make sure to only use the search imdb tool to find the id
+2. consider the documentation of how to organize jellyfin media. i'll attach it
+3. use the available tools to copy and rename my files and place them in the right folder
+
+IMPORTANT: when you reuse a tool explain to me with details why another use is necessary
 
 the folder for my jellyfin movies is {{.MoviesFolder}}, and the one for my jellyfin shows is {{.ShowsFolder}}
+
+IMPORTANT: only organize video and subtitle files. not any other metadata that might come from the source folder.
 
 now here's the documentation on how to organize a jellyfin media library
 
